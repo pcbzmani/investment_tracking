@@ -1,59 +1,59 @@
 import streamlit as st
 import pandas as pd
-import os
+import io
 from datetime import datetime
 
 # --- Configuration ---
-# --- Configuration ---
-# FILE_PATH = 'finance_tracker.xlsx' # Removed single file path
 COLUMNS = ['Date', 'Type', 'Category', 'Description', 'Mode', 'Amount']
-
-# --- Helper Functions ---
-def get_file_path(year, month):
-    """Returns the filename for a specific year and month."""
-    return f'finance_tracker_{year}_{month:02d}.xlsx'
-
-def load_data(year, month):
-    """Loads data for a specific year and month."""
-    file_path = get_file_path(year, month)
-    if os.path.exists(file_path):
-        try:
-            df = pd.read_excel(file_path)
-            return df
-        except Exception as e:
-            st.error(f"Error loading file {file_path}: {e}")
-            return pd.DataFrame(columns=COLUMNS)
-    else:
-        return pd.DataFrame(columns=COLUMNS)
-
-def save_data(df, year, month):
-    """Saves the DataFrame to the specific monthly file."""
-    file_path = get_file_path(year, month)
-    try:
-        df.to_excel(file_path, index=False)
-    except Exception as e:
-        st.error(f"Error saving file {file_path}: {e}")
 
 # --- App UI ---
 st.set_page_config(page_title="Expense & Income Tracker", layout="centered", page_icon="💰")
 st.title("💰 Expense & Income Tracker")
 
-# --- Sidebar: Period Selector ---
-st.sidebar.header("Select Period")
-current_year = datetime.today().year
-years = list(range(current_year - 1, current_year + 5))
-selected_year = st.sidebar.selectbox("Year", years, index=years.index(current_year))
-selected_month = st.sidebar.selectbox("Month", list(range(1, 13)), index=datetime.today().month - 1)
+# --- Sidebar: File Management ---
+st.sidebar.header("📂 File Management")
+st.sidebar.info("Upload your Excel file to start. Your data stays in your browser.")
 
-# Current file being viewed
-current_file_path = get_file_path(selected_year, selected_month)
+uploaded_file = st.sidebar.file_uploader("Upload Monthly Excel File", type=["xlsx"])
+
+# --- Session State Management ---
+if 'df' not in st.session_state:
+    st.session_state.df = pd.DataFrame(columns=COLUMNS)
+if 'file_name' not in st.session_state:
+    st.session_state.file_name = "finance_tracker.xlsx"
+
+# Load data when file is uploaded or changed
+if uploaded_file is not None:
+    # Check if this is a new file upload to reset/load
+    if st.session_state.file_name != uploaded_file.name:
+         st.session_state.file_name = uploaded_file.name
+         try:
+            st.session_state.df = pd.read_excel(uploaded_file)
+            # Ensure Date is datetime
+            if not st.session_state.df.empty:
+                 st.session_state.df['Date'] = pd.to_datetime(st.session_state.df['Date'])
+         except Exception as e:
+            st.error(f"Error loading file: {e}")
+else:
+    # If no file uploaded, keep session state or reset if user wants (optional)
+    # For now, we allow starting from scratch if no file is uploaded.
+    pass
+
+# --- Helper Functions ---
+def convert_df_to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
+
+# --- Main App Logic ---
 
 # Create Tabs
 tab1, tab2 = st.tabs(["📝 Data Entry", "📊 Analytics"])
 
 with tab1:
-    st.subheader(f"Add Transaction")
-    # --- Input Form ---
+    st.subheader("Add Transaction")
+    
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
@@ -61,7 +61,6 @@ with tab1:
             date_input = st.date_input("Date", datetime.today())
             transaction_type = st.selectbox("Transaction Type", ["Income", "Expense"])
             
-            # Category options logic
             if transaction_type == "Income":
                 category_options = ["Salary", "Other"]
             else:
@@ -80,14 +79,6 @@ with tab1:
 
         if submitted:
             if amount > 0:
-                # 1. Determine target file based on INPUT DATE, not selected view
-                target_year = date_input.year
-                target_month = date_input.month
-                
-                # 2. Load existing data for that specific month
-                df = load_data(target_year, target_month)
-                
-                # 3. Append new entry
                 new_entry = {
                     "Date": pd.to_datetime(date_input),
                     "Type": transaction_type,
@@ -96,36 +87,23 @@ with tab1:
                     "Mode": mode,
                     "Amount": amount
                 }
-                df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
-                
-                # 4. Save to the specific monthly file
-                save_data(df, target_year, target_month)
-                
-                st.success(f"Entry saved to {get_file_path(target_year, target_month)}!")
-                
-                # Refresh if we are viewing the same month we just added to
-                if target_year == selected_year and target_month == selected_month:
-                    st.rerun()
+                # Update Session State
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_entry])], ignore_index=True)
+                st.success("Entry added! Remember to download the updated file.")
             else:
                 st.warning("Please enter a valid amount.")
 
-    # --- Data Preview & Download ---
     st.divider()
-    st.subheader(f"Manage Transactions ({datetime(selected_year, selected_month, 1).strftime('%B %Y')})")
+    st.subheader("Manage Transactions")
 
-    # Load data for the SELECTED period to view
-    current_df = load_data(selected_year, selected_month)
-
-    if not current_df.empty:
-        # Format Date for display
-        display_df = current_df.copy()
-        display_df['Date'] = display_df['Date'].dt.date
-        
+    if not st.session_state.df.empty:
         # Display transactions
+        display_df = st.session_state.df.copy()
+        display_df['Date'] = display_df['Date'].dt.date
         st.dataframe(display_df, use_container_width=True)
         
         # Delete Section
-        st.caption("Delete a Record (from this month)")
+        st.caption("Delete a Record")
         col_del1, col_del2 = st.columns([3, 1])
         with col_del1:
             options = display_df.apply(lambda x: f"{x.name}: {x['Date']} - {x['Category']} - {x['Amount']}", axis=1)
@@ -136,53 +114,54 @@ with tab1:
             st.write("") 
             if st.button("Delete Selected"):
                 if selected_indices:
-                    current_df = current_df.drop(selected_indices).reset_index(drop=True)
-                    # Save back to specific file
-                    save_data(current_df, selected_year, selected_month)
-                    st.success("Records deleted successfully!")
+                    st.session_state.df = st.session_state.df.drop(selected_indices).reset_index(drop=True)
+                    st.success("Records deleted! Remember to download.")
                     st.rerun()
                 else:
                     st.warning("Select records first.")
-
-        # 3. Download Feature
-        # Use current_file_path which was determined at the top
-        if os.path.exists(current_file_path):
-            with open(current_file_path, "rb") as f:
-                st.download_button(
-                    label=f"Download {os.path.basename(current_file_path)}",
-                    data=f,
-                    file_name=os.path.basename(current_file_path),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
     else:
-        st.info(f"No records found for {datetime(selected_year, selected_month, 1).strftime('%B %Y')}.")
+        st.info("No records yet. Upload a file or add a new transaction.")
 
 with tab2:
     st.subheader("Financial Analytics")
     
-    # Use the same data loaded for the selected period
-    data = current_df
+    data = st.session_state.df.copy()
     
     if not data.empty:
         # Ensure Date is datetime
         data['Date'] = pd.to_datetime(data['Date'])
         
-        # --- Sidebar Filters for Analytics (Within the selected month) ---
+        # --- Sidebar Filters ---
         st.sidebar.divider()
         st.sidebar.header("Analytics Filters")
+        
+        min_date = data['Date'].min()
+        max_date = data['Date'].max()
+        
+        if pd.isnull(min_date) or pd.isnull(max_date):
+             st.info("Not enough data for date filtering.")
+             filtered_data = data
+        else:
+            start_date, end_date = st.sidebar.date_input(
+                "Select Date Range",
+                [min_date, max_date],
+                min_value=min_date,
+                max_value=max_date
+            )
+            filtered_data = data[
+                (data['Date'] >= pd.to_datetime(start_date)) & 
+                (data['Date'] <= pd.to_datetime(end_date))
+            ]
         
         # Category Filter
         all_categories = ["All"] + list(data['Category'].unique())
         selected_category = st.sidebar.selectbox("Select Category", all_categories)
         
-        # Filter Data
-        filtered_data = data.copy()
-        
         if selected_category != "All":
             filtered_data = filtered_data[filtered_data['Category'] == selected_category]
         
         if not filtered_data.empty:
-            # --- Key Metrics ---
+            # Metrics
             total_income = filtered_data[filtered_data['Type'] == 'Income']['Amount'].sum()
             total_expense = filtered_data[filtered_data['Type'] == 'Expense']['Amount'].sum()
             net_balance = total_income - total_expense
@@ -194,34 +173,34 @@ with tab2:
             
             st.divider()
 
-            # --- Expense Analysis ---
-            st.subheader("Expense Breakdown")
-            
-            # Filter only expenses
+            # Charts
             expense_data = filtered_data[filtered_data['Type'] == 'Expense']
-            
             if not expense_data.empty:
                 c1, c2 = st.columns(2)
-                
                 with c1:
                     st.caption("Expenses by Category")
-                    category_breakdown = expense_data.groupby('Category')['Amount'].sum().sort_values(ascending=False)
-                    st.bar_chart(category_breakdown)
-                    
+                    st.bar_chart(expense_data.groupby('Category')['Amount'].sum().sort_values(ascending=False))
                 with c2:
                     st.caption("Expenses by Mode")
-                    mode_breakdown = expense_data.groupby('Mode')['Amount'].sum()
-                    st.bar_chart(mode_breakdown, horizontal=True) 
+                    st.bar_chart(expense_data.groupby('Mode')['Amount'].sum(), horizontal=True)
                 
                 st.subheader("Spending Trend")
-                # Daily Spending Trend
-                daily_spending = expense_data.groupby('Date')['Amount'].sum()
-                st.line_chart(daily_spending)
-            
+                st.line_chart(expense_data.groupby('Date')['Amount'].sum())
             else:
-                st.info("No expenses found for the selected filters.")
+                st.info("No expenses found for selection.")
         else:
-            st.info("No data matches the selected filters.")
-
+             st.info("No data matches the filters.")
     else:
-        st.info("Add some transactions in the 'Data Entry' tab to see analytics.")
+        st.info("Add transactions to see analytics.")
+
+# --- Download Section (Sidebar) ---
+st.sidebar.divider()
+if not st.session_state.df.empty:
+    excel_data = convert_df_to_excel(st.session_state.df)
+    st.sidebar.download_button(
+        label="💾 Download Updated File",
+        data=excel_data,
+        file_name=st.session_state.file_name,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key='download-btn'
+    )

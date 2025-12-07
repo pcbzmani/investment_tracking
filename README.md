@@ -3,12 +3,11 @@
 A personal finance application built with Streamlit and Pandas.
 
 ## Features
+- **Privacy First**: Stateless architecture ensures NO data is stored on the server. Your data stays on your device.
 - **Track Finances**: Record Income and Expenses with categories.
-- **Monthly Data Storage**: Data is saved automatically into monthly Excel files (e.g., `finance_tracker_2024_12.xlsx`) for scalability and safety.
-- **Analytics Dashboard**: View spending trends, category breakdowns, and key metrics (Total Income, Expense, Balance).
-- **Dynamic Filters**: Filter analytics by Date Range and Category.
-- **Manage Records**: Delete specific transactions directly from the app.
-- **Power BI Ready**: Download Excel files to use as a data source for Power BI dashboards.
+- **Monthly Data Management**: Upload your monthly Excel file, make edits, and download the updated version.
+- **Analytics Dashboard**: View spending trends, category breakdowns, and key metrics.
+- **Power BI Ready**: Data remains in standard Excel format for external dashboards.
 
 ## Installation
 
