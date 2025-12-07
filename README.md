@@ -1,0 +1,40 @@
+# Expense & Income Tracker
+
+A personal finance application built with Streamlit and Pandas.
+
+## Features
+- **Track Finances**: Record Income and Expenses with categories.
+- **Monthly Data Storage**: Data is saved automatically into monthly Excel files (e.g., `finance_tracker_2024_12.xlsx`) for scalability and safety.
+- **Analytics Dashboard**: View spending trends, category breakdowns, and key metrics (Total Income, Expense, Balance).
+- **Dynamic Filters**: Filter analytics by Date Range and Category.
+- **Manage Records**: Delete specific transactions directly from the app.
+- **Power BI Ready**: Download Excel files to use as a data source for Power BI dashboards.
+
+## Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/pcbzmani/investment_tracking.git
+    cd investment_tracking
+    ```
+
+2.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  Run the application:
+    ```bash
+    streamlit run app.py
+    ```
+
+## Usage
+- Open the app in your browser at `http://localhost:8501`.
+- Go to **Data Entry** to add new transactions.
+- Go to **Analytics** to view charts and insights.
+
+## Technologies
+- Python
+- Streamlit
+- Pandas
+- OpenPyXL
