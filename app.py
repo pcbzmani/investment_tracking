@@ -1,52 +1,51 @@
 import streamlit as st
 import pandas as pd
-import io
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 
 # --- Configuration ---
+# Columns must match your Google Sheet exactly or will be created
 COLUMNS = ['Date', 'Type', 'Category', 'Description', 'Mode', 'Amount']
 
 # --- App UI ---
 st.set_page_config(page_title="Expense & Income Tracker", layout="centered", page_icon="💰")
 st.title("💰 Expense & Income Tracker")
 
-# --- Sidebar: File Management ---
-st.sidebar.header("📂 File Management")
-st.sidebar.info("Upload your Excel file to start. Your data stays in your browser.")
+# --- Google Sheets Connection ---
+# Helper function to get data
+def get_data():
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        # Read data, evaluate strings to real types if needed (though read() usually handles basic types)
+        df = conn.read()
+        return df
+    except Exception as e:
+        st.error(f"Error connecting to Google Sheets: {e}")
+        return pd.DataFrame(columns=COLUMNS)
 
-uploaded_file = st.sidebar.file_uploader("Upload Monthly Excel File", type=["xlsx"])
+def update_data(df):
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        conn.update(data=df)
+        st.success("Data updated successfully in Google Drive!")
+        st.cache_data.clear() # Clear cache to refresh data on next load
+    except Exception as e:
+        st.error(f"Error updating Google Sheets: {e}")
 
-# --- Session State Management ---
-if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame(columns=COLUMNS)
-if 'file_name' not in st.session_state:
-    st.session_state.file_name = "finance_tracker.xlsx"
+# --- Helper to ensure columns exist ---
+try:
+    current_df = get_data()
+    # If using a blank sheet, columns might not exist. Ensure at least header exists.
+    # Note: st-gsheets-connection read() might return empty or just headers.
+    # We will enforce schema locally before saving back if it's empty.
+    if current_df.empty and set(current_df.columns) != set(COLUMNS):
+         current_df = pd.DataFrame(columns=COLUMNS)
+except:
+    current_df = pd.DataFrame(columns=COLUMNS)
 
-# Load data when file is uploaded or changed
-if uploaded_file is not None:
-    # Check if this is a new file upload to reset/load
-    if st.session_state.file_name != uploaded_file.name:
-         st.session_state.file_name = uploaded_file.name
-         try:
-            st.session_state.df = pd.read_excel(uploaded_file)
-            # Ensure Date is datetime
-            if not st.session_state.df.empty:
-                 st.session_state.df['Date'] = pd.to_datetime(st.session_state.df['Date'])
-         except Exception as e:
-            st.error(f"Error loading file: {e}")
-else:
-    # If no file uploaded, keep session state or reset if user wants (optional)
-    # For now, we allow starting from scratch if no file is uploaded.
-    pass
-
-# --- Helper Functions ---
-def convert_df_to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
-    return output.getvalue()
-
-# --- Main App Logic ---
+# Ensure Date is datetime
+if not current_df.empty and 'Date' in current_df.columns:
+    current_df['Date'] = pd.to_datetime(current_df['Date'])
 
 # Create Tabs
 tab1, tab2 = st.tabs(["📝 Data Entry", "📊 Analytics"])
@@ -87,18 +86,21 @@ with tab1:
                     "Mode": mode,
                     "Amount": amount
                 }
-                # Update Session State
-                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_entry])], ignore_index=True)
-                st.success("Entry added! Remember to download the updated file.")
+                # Append to current dataframe
+                updated_df = pd.concat([current_df, pd.DataFrame([new_entry])], ignore_index=True)
+                
+                # Update Google Sheet
+                update_data(updated_df)
+                st.rerun()
             else:
                 st.warning("Please enter a valid amount.")
 
     st.divider()
     st.subheader("Manage Transactions")
 
-    if not st.session_state.df.empty:
+    if not current_df.empty:
         # Display transactions
-        display_df = st.session_state.df.copy()
+        display_df = current_df.copy()
         display_df['Date'] = display_df['Date'].dt.date
         st.dataframe(display_df, use_container_width=True)
         
@@ -114,18 +116,18 @@ with tab1:
             st.write("") 
             if st.button("Delete Selected"):
                 if selected_indices:
-                    st.session_state.df = st.session_state.df.drop(selected_indices).reset_index(drop=True)
-                    st.success("Records deleted! Remember to download.")
+                    updated_df = current_df.drop(selected_indices).reset_index(drop=True)
+                    update_data(updated_df)
                     st.rerun()
                 else:
                     st.warning("Select records first.")
     else:
-        st.info("No records yet. Upload a file or add a new transaction.")
+        st.info("No records found. Add a new transaction above!")
 
 with tab2:
     st.subheader("Financial Analytics")
     
-    data = st.session_state.df.copy()
+    data = current_df.copy()
     
     if not data.empty:
         # Ensure Date is datetime
@@ -139,8 +141,7 @@ with tab2:
         max_date = data['Date'].max()
         
         if pd.isnull(min_date) or pd.isnull(max_date):
-             st.info("Not enough data for date filtering.")
-             filtered_data = data
+            filtered_data = data
         else:
             start_date, end_date = st.sidebar.date_input(
                 "Select Date Range",
@@ -193,14 +194,4 @@ with tab2:
     else:
         st.info("Add transactions to see analytics.")
 
-# --- Download Section (Sidebar) ---
-st.sidebar.divider()
-if not st.session_state.df.empty:
-    excel_data = convert_df_to_excel(st.session_state.df)
-    st.sidebar.download_button(
-        label="💾 Download Updated File",
-        data=excel_data,
-        file_name=st.session_state.file_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key='download-btn'
-    )
+# Note: No 'Download' button needed as data maps directly to Google Sheets, providing a better UI there.

@@ -3,11 +3,11 @@
 A personal finance application built with Streamlit and Pandas.
 
 ## Features
-- **Privacy First**: Stateless architecture ensures NO data is stored on the server. Your data stays on your device.
+- **Google Sheets Backend**: Data is saved immediately to the cloud. Access it from your mobile device via the Google Sheets app.
 - **Track Finances**: Record Income and Expenses with categories.
-- **Monthly Data Management**: Upload your monthly Excel file, make edits, and download the updated version.
 - **Analytics Dashboard**: View spending trends, category breakdowns, and key metrics.
-- **Power BI Ready**: Data remains in standard Excel format for external dashboards.
+- **Dynamic Filters**: Drill down by Date Range and Category.
+- **Power BI Ready**: Connect Power BI directly to the Google Sheet.
 
 ## Installation
 
